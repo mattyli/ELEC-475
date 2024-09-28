@@ -1,0 +1,5 @@
+python train.py -z 8 -e 50 -b 2048 -s MLP.8.pth -p loss.MLP.8.png
+python interp_test.py -z 8 -s MLP.8.pth -n 8
+
+python train.py -z 8 -e 30 -b 2048 -s MLP.8.30.pth -p loss.MLP.8.30.png
+python interp_test.py -z 8 -s MLP.8.30.pth -n 8

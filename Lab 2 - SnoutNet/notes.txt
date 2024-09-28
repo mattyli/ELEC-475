@@ -1,0 +1,2 @@
+- Convolutional layers
+- 0,0 is the top left corner of an image
