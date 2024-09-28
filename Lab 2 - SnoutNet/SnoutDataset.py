@@ -62,7 +62,7 @@ class SnoutDataset(Dataset):
             Tuple[torch.Tensor, Tuple[int, int]]: returns a tensor representation of the image and tuple of coordinates describing the nose
 
         """
-        if torch.is_tensor(idx):
+        if torch.is_tensor(idx) or isinstance(idx, np.ndarray):         # numpy and torch have the same method to cast to a list
             idx = idx.tolist()
         
         path = os.path.join(self.datapath, self.image_paths[idx])

@@ -36,6 +36,7 @@ class ResizeImage(object):
         else:
             assert len(output_size) == 2    # make sure that the input is actually a 2-ple
             self.output_size = output_size
+            
     # TODO: verify whether the coordinate order in the text file is x or y
     def __call__(self, sample: dict):       # expects a dictionary of {image, centerpoint}
         pass
