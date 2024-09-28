@@ -13,17 +13,6 @@ DROPOUT_P = 0.0     # dropout probability
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def show(imgs):
-    if not isinstance(imgs, list):
-        imgs = [imgs]
-    fig, axs = plt.subplots(ncols=len(imgs), squeeze=False)
-    for i, img in enumerate(imgs):
-        img = img.detach()
-        img = F.to_pil_image(img)
-        axs[0, i].imshow(np.asarray(img))
-        axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-    fig.show()
-
 class SnoutNet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -52,8 +41,8 @@ class SnoutNet(nn.Module):
     def forward(self, X):
         X = self.featureNet(X)
         print(f"Size of Feature Net before reshape {X.size()}")
-        #X = X.view(-1, 256*4*4) # reshape for FC layers
-        X = torch.flatten(X)        # reshape for FC layers
+        X = X.view(-1, 256*4*4) # reshape for FC layers
+        #X = torch.flatten(X)        # reshape for FC layers
         return self.regressor(X)
 
 # testing script 
