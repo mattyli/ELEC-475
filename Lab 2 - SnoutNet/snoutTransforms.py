@@ -25,7 +25,7 @@ class ToTensor(object):
         image = image.transpose((2, 0, 1))
         return {'image': torch.from_numpy(image), 'center': torch.from_numpy(center)}
 
-# TODO: should the resize tuple be hardcoded into this? <-- not good for modularity, but can't pass as a param if being used with compose?
+# Taken from PyTorch tutorial, modified to fit this task
 # TODO: this example pretty much does what we want, just need to change it from multiple landmarks to one (https://pytorch.org/tutorials/beginner/data_loading_tutorial.html)
 class RescaleImage(object):
     """
