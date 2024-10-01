@@ -14,26 +14,26 @@ DROPOUT_P = 0.0     # dropout probability
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class SnoutNet(nn.Module):
-    def __init__(self):
+    def __init__(self, kernel_size: int, stride: int, padding: int, dropout: float):
         super().__init__()
         self.featureNet = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=KERNEL_SIZE, stride=STRIDE, padding=PADDING),     # CONV 1
+            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=kernel_size, stride=stride, padding=padding),     # CONV 1
             nn.ReLU(),                                                                                             
-            nn.MaxPool2d(kernel_size=KERNEL_SIZE, stride=STRIDE, padding=PADDING),                                  # MAX 1
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=KERNEL_SIZE, stride=STRIDE, padding=PADDING),   # CONV2
+            nn.MaxPool2d(kernel_size=kernel_size, stride=stride, padding=padding),                                  # MAX 1
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=kernel_size, stride=stride, padding=padding),   # CONV2
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=KERNEL_SIZE, stride=STRIDE, padding=PADDING),                                  # MAX 2
-            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=KERNEL_SIZE, stride=STRIDE, padding=PADDING),  # CONV 3
+            nn.MaxPool2d(kernel_size=kernel_size, stride=stride, padding=padding),                                  # MAX 2
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=kernel_size, stride=stride, padding=padding),  # CONV 3
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=KERNEL_SIZE, stride=STRIDE, padding=PADDING),                                  # MAX 3
+            nn.MaxPool2d(kernel_size=kernel_size, stride=stride, padding=padding),                                  # MAX 3
             nn.ReLU()
         )
-
+ 
         self.regressor = nn.Sequential(
-            nn.Dropout(p=DROPOUT_P, inplace=True),
+            nn.Dropout(p=dropout, inplace=True),
             nn.Linear(in_features=256*4*4, out_features=1024),      # (FC1) b x 256 x 4 x 4
             nn.ReLU(),      
-            nn.Dropout(p=DROPOUT_P, inplace=True),
+            nn.Dropout(p=dropout, inplace=True),
             nn.Linear(in_features=1024, out_features=1024),         # (FC2) b x 1024
             nn.Linear(in_features=1024, out_features=2)             # (FC3) b x 1024
         )
@@ -41,13 +41,13 @@ class SnoutNet(nn.Module):
     def forward(self, X):
         X = self.featureNet(X)
         print(f"Size of Feature Net before reshape {X.size()}")
-        X = X.view(-1, 256*4*4) # reshape for FC layers
+        X = X.view(-1, 256*4*4)                                     # reshape for FC layers
         #X = torch.flatten(X)        # reshape for FC layers
         return self.regressor(X)
 
 # testing script 
 if __name__ == "__main__":
     test_tensor = (16, 3, 227, 227)
-    model = SnoutNet()
+    model = SnoutNet(KERNEL_SIZE, STRIDE, PADDING, DROPOUT_P)
     model = model.to(device)
-    summary(model, input_size=test_tensor)
+    summary(model, test_tensor)
