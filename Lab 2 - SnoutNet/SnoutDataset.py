@@ -12,22 +12,42 @@ import pandas as pd
 import os
 from skimage import io
 import numpy as np
+from tqdm import tqdm
+from PIL import Image
 
 DECODE_MODE = ImageReadMode.RGB
 IMAGE_SIZE = (227, 227)
 
 def read_file(filepath: Union[str, Path])->Tuple[List, np.ndarray]:
+    """
+    Reads a given text file and extracts image paths and coordinate pairs.
+
+    Args:
+        filepath (Union[str, Path]): path to the .txt file with the required information.
+
+    Returns:
+        Tuple[List, np.ndarray]: List of image paths, numpy array of respective coordinates.
+    """
     img_paths = []
     snout_tups = []
+    
     with open(filepath, "r") as file:
         line = file.readline()
         while line:
             img_path, snout_center = line.rstrip().split(",", 1)
             snout_center = ast.literal_eval(ast.literal_eval(snout_center)) # need the nested ast.literal_eval() to break out of the double quotes (because snout center is technically a string within a string (line))
             line = file.readline()
-            img_paths.append(img_path)
-            snout_tups.append(snout_center)
+
+            try:
+                with Image.open(os.path.join('images/', img_path)) as img:  # using PIL.Image.open() and .verify() to check the integrity of images, using skimage to actually read
+                    img.verify()
+                    img_paths.append(img_path)
+                    snout_tups.append(snout_center)
+            except (IOError, SyntaxError) as e:
+                print(f'Corrupted file: {img_path} \n Error {e}')
+
     snout_tups = np.array(snout_tups, dtype=float).reshape(-1,2)
+    print(f"Len img_paths: {len(img_paths)} : Len tuples: {len(snout_tups)}")
     return img_paths, snout_tups
 
 # shows the landmarks for a single batch
@@ -42,12 +62,17 @@ def show_landmarks(image: Union[torch.Tensor, np.ndarray], center):
 def show_batch(batch: dict):
     batch_images, batch_center = batch['image'], batch['center']
     batch_size = len(batch_images)
-
+    im_size = batch_images.size(2)
+    grid_border_size = 2
+   
     grid = utils.make_grid(batch_images)
     plt.imshow(grid.numpy().transpose((1, 2, 0)))
     for i in range(batch_size):
-        pass
-    pass
+  #      print(f"center: {batch_center[i]}")
+        plt.scatter(batch_center[i, 0].numpy() + i * im_size + (i+1) * grid_border_size, 
+                    batch_center[i, 1].numpy() + grid_border_size,
+                    s=10, marker='*', c='r'
+                    )
 
 # BEGIN CLASS DEFINITION
 
@@ -91,20 +116,19 @@ if __name__ == "__main__":
 
     transform_pipeline = transforms.Compose([RescaleImage(IMAGE_SIZE), ToTensor()])
 
-    # TODO: change this to conform to the signature of __getitem__()
     dataset = SnoutDataset(infopath=filepath, datapath=datapath, transform=transform_pipeline)
     dataloader = DataLoader(dataset, batch_size=8, shuffle=True, num_workers=0)
     
     for i, batch in enumerate(dataloader):
-        print((batch.keys()))
-        print(f"Batch Image size: {batch['image'].size()} \n Batch Center size: {batch['center'].size()}")
 
-        if i == 10:
+        if i == 25:
+            print(f"Batch Image size: {batch['image'].size()} \n Batch Center size: {batch['center'].size()}")
+
+            plt.figure(figsize=(10,10))
+            show_batch(batch)
+            plt.axis('off')
+            plt.ioff()
+            plt.title(f"Batch {i} from dataloader")
+            plt.show()
             break
     
-    
-    #sample = ds.__getitem__(1)
-
-    #show_landmarks(sample['image'], sample['center'])
-
-    # print(f"sample img path {sample[0]} sample coordinates {type(sample[1])}")
