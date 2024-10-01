@@ -1,2 +1,6 @@
 - Convolutional layers
 - 0,0 is the top left corner of an image
+- total of 5,617,794 trainable parameters
+- Loss function 
+    - https://discuss.pytorch.org/t/euclidian-loss-self-written/19829/3
+    - should use euclidean distance c = sqrt(a^2 + b^2) difference in coordinates
