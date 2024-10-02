@@ -18,12 +18,12 @@ from PIL import Image
 DECODE_MODE = ImageReadMode.RGB
 IMAGE_SIZE = (227, 227)
 
-def read_file(filepath: Union[str, Path])->Tuple[List, np.ndarray]:
+def read_file(label_path: Union[str, Path])->Tuple[List, np.ndarray]:
     """
     Reads a given text file and extracts image paths and coordinate pairs.
 
     Args:
-        filepath (Union[str, Path]): path to the .txt file with the required information.
+        label_path (Union[str, Path]): path to the .txt file with the required information.
 
     Returns:
         Tuple[List, np.ndarray]: List of image paths, numpy array of respective coordinates.
@@ -31,7 +31,7 @@ def read_file(filepath: Union[str, Path])->Tuple[List, np.ndarray]:
     img_paths = []
     snout_tups = []
     
-    with open(filepath, "r") as file:
+    with open(label_path, "r") as file:
         line = file.readline()
         while line:
             img_path, snout_center = line.rstrip().split(",", 1)
@@ -77,10 +77,10 @@ def show_batch(batch: dict):
 # BEGIN CLASS DEFINITION
 
 class SnoutDataset(Dataset):
-    def __init__(self, infopath: Union[str, Path], datapath: Union[str, Path], transform=None)->None:
+    def __init__(self, label_path: Union[str, Path], image_folder: Union[str, Path], transform=None)->None:
         self.transform = transform
-        self.image_paths, self.snout_tuples = read_file(infopath)
-        self.datapath = datapath
+        self.image_paths, self.snout_tuples = read_file(label_path)
+        self.image_folder = image_folder
 
     def __len__(self)->int:
         return len(self.image_paths)
@@ -100,7 +100,7 @@ class SnoutDataset(Dataset):
         if torch.is_tensor(idx) or isinstance(idx, np.ndarray):         # numpy and torch have the same method to cast to a list
             idx = idx.tolist()
         
-        path = os.path.join(self.datapath, self.image_paths[idx])
+        path = os.path.join(self.image_folder, self.image_paths[idx])
         image = io.imread(path)                                         # this should be a tensor (https://pytorch.org/vision/main/generated/torchvision.io.decode_image.html#torchvision.io.decode_image)
         snout_center = self.snout_tuples[idx]
         sample = {'image':image, 'center':snout_center}
@@ -111,12 +111,12 @@ class SnoutDataset(Dataset):
         return sample
 
 if __name__ == "__main__":
-    filepath = Path("train_noses.txt")
-    datapath = Path("images")
+    label_path = Path("train_noses.txt")
+    image_folder = Path("images")
 
     transform_pipeline = transforms.Compose([RescaleImage(IMAGE_SIZE), ToTensor()])
 
-    dataset = SnoutDataset(infopath=filepath, datapath=datapath, transform=transform_pipeline)
+    dataset = SnoutDataset(label_path=label_path, image_folder=image_folder, transform=transform_pipeline)
     dataloader = DataLoader(dataset, batch_size=8, shuffle=True, num_workers=0)
     
     for i, batch in enumerate(dataloader):
