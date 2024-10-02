@@ -27,6 +27,7 @@ IMAGE_FOLDER = Path("images/")
 TRAIN_PATH = Path("train_noses.txt")
 TEST_PATH = Path("test_noses.txt")
 
+# Play around with this
 def init_weights(layer: nn.Module):
     """
     Initialize layer weights
@@ -40,9 +41,60 @@ def init_weights(layer: nn.Module):
         torch.nn.init.xavier_uniform_(layer.weight)
         layer.bias.data.fill_(0.01)
 
+# training loop
+def train(n_epochs,
+          optimizer,
+          model,
+          loss_fn,
+          train_loader,
+          scheduler,
+          device,
+          save_file,
+          plot_file,
+          validation_loader=None
+          )->None:
+    print("training model...")
+
+    losses_train = []
+    model.train()
+    for epoch in range(n_epochs):
+        print(f"Epoch: {epoch+1}")
+        loss_train = 0.0
+
+        for batch in train_loader:
+            images, centers = batch['image'], batch['center']       # load images and ground truth (labelled centers)
+            images = images.to(device=device)                       
+            predicted_centers = model(images)                       
+            loss = loss_fn(predicted_centers, centers)              
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            loss_train += loss.item()
+        
+        scheduler.step(loss_train)
+        losses_train += [loss_train/len(train_loader)]
+        print(f"{datetime.datetime.now()} Epoch: {epoch+1}, Training Loss: {loss_train/len(train_loader)}")
+    
+    # moved to outside the loop, don't need to redraw image every epoch
+    if save_file:
+        torch.save(model.state_dict(), save_file)
+    if plot_file:
+        plt.figure(2, figsize=(12, 7))
+        plt.clf()
+        plt.plot(losses_train, label='train')
+        plt.xlabel('epoch')
+        plt.ylabel('loss')
+        plt.legend(loc=1)
+        print('saving ', plot_file)
+        plt.savefig(plot_file)
+
 def main():
 
-    global bottleneck_size, save_file, n_epochs, batch_size
+    save_file = "weights.pth"   # default
+    plot_file = "loss.png"
+    n_epochs = N_EPOCHS
+    batch_size = BATCH_SIZE
 
     print('running main ...')
 
@@ -78,16 +130,26 @@ def main():
     summary(model, model.input_shape)
 
     # TODO: 
-    train_transform = transforms.Compose([snoutTransforms.RescaleImage(IMAGE_SIZE), snoutTransforms.ToTensor()])
-    test_transform = train_transform
+    transform_pipeline = transforms.Compose([snoutTransforms.RescaleImage(IMAGE_SIZE), snoutTransforms.ToTensor()])
 
-    train_set = SnoutDataset()
-
-    # train_set = MNIST('./data/mnist', train=True, download=True, transform=train_transform)
-    # # test_set = MNIST('./data/mnist', train=False, download=True, transform=test_transform)
-    # train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    # # test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
+    train_set = SnoutDataset(label_path="train_noses.txt", image_folder="images/", transform=transform_pipeline)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min')
     loss_fn = nn.MSELoss(size_average=None, reduce=None, reduction='mean')
+
+    train(n_epochs=n_epochs,
+          optimizer=optimizer,
+          model=model,
+          loss_fn=loss_fn,
+          train_loader=train_loader,
+          scheduler=scheduler,
+          device=device,
+          save_file=save_file,
+          plot_file=plot_file
+          )
+
+
+if __name__ == 'main':
+    main()
