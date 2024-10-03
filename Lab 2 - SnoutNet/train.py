@@ -11,7 +11,12 @@ from SnoutDataset import SnoutDataset
 from model import SnoutNet
 from pathlib import Path
 from torchinfo import summary
+from tqdm import tqdm
+import os
 
+# colab dependencies (https://medium.com/swlh/leverage-google-colab-gpu-runtime-for-your-non-notebook-python-project-d13840c932eb)
+# from google.colab import drive
+# drive.mount('/content/drive/My Drive')
 
 # global vars and hyperparameters
 SAVE_FILE = "weights.pth"
@@ -47,20 +52,23 @@ def train(n_epochs,
           model,
           loss_fn,
           train_loader,
+          validation_loader,
           scheduler,
           device,
           save_file,
-          plot_file,
-          validation_loader=None
+          plot_file
           )->None:
     print("training model...")
 
     losses_train = []
-    model.train()
-    for epoch in range(n_epochs):
+    losses_validation = []
+    for epoch in tqdm(range(n_epochs)):
         print(f"Epoch: {epoch+1}")
         loss_train = 0.0
-
+        validation_loss = 0.0
+        
+        # train loop
+        model.train()
         for batch in train_loader:
             images, centers = batch['image'], batch['center']       # load images and ground truth (labelled centers)
             images = images.to(device=device)                       
@@ -71,10 +79,21 @@ def train(n_epochs,
             loss.backward()
             optimizer.step()
             loss_train += loss.item()
-        
+
+        # validation loop
+        model.eval()
+        for validation_batch in validation_loader:
+            validation_images, validation_centers = validation_batch['image'], validation_batch['center']
+            validation_images = validation_images.to(device=device)
+            validation_pred = model(validation_images)
+            loss = loss_fn(validation_pred, validation_centers)
+
         scheduler.step(loss_train)
-        losses_train += [loss_train/len(train_loader)]
-        print(f"{datetime.datetime.now()} Epoch: {epoch+1}, Training Loss: {loss_train/len(train_loader)}")
+        epoch_train_loss = loss_train/len(train_loader)
+        epoch_validation_loss = validation_loss/ len(validation_loader)
+        losses_train += [epoch_train_loss]
+        losses_validation += [epoch_validation_loss]
+        print(f"{datetime.datetime.now()} Epoch: {epoch+1}, Training Loss: {epoch_train_loss}, Validation Loss: {epoch_validation_loss}")
     
     # moved to outside the loop, don't need to redraw image every epoch
     if save_file:
@@ -83,6 +102,7 @@ def train(n_epochs,
         plt.figure(2, figsize=(12, 7))
         plt.clf()
         plt.plot(losses_train, label='train')
+        plt.plot(losses_validation, label='validation')
         plt.xlabel('epoch')
         plt.ylabel('loss')
         plt.legend(loc=1)
@@ -128,12 +148,13 @@ def main():
     model.to(device)
     model.apply(init_weights)
     summary(model, model.input_shape)
-
-    # TODO: 
     transform_pipeline = transforms.Compose([snoutTransforms.RescaleImage(IMAGE_SIZE), snoutTransforms.ToTensor()])
 
-    train_set = SnoutDataset(label_path="train_noses.txt", image_folder="images/", transform=transform_pipeline)
+    train_set = SnoutDataset(label_path="train_noses.txt", image_folder="images-original/", transform=transform_pipeline)
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+
+    validation_set = SnoutDataset(label_path="test_noses.txt", image_folder="images-original/", transform=transform_pipeline)
+    validation_loader = DataLoader(validation_set, batch_size=batch_size, shuffle=True)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min')
@@ -144,6 +165,7 @@ def main():
           model=model,
           loss_fn=loss_fn,
           train_loader=train_loader,
+          validation_loader=validation_loader,
           scheduler=scheduler,
           device=device,
           save_file=save_file,
