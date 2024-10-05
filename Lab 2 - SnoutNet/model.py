@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
 import torchvision.transforms.functional as F
-from torchinfo import summary
+from torchsummary import summary
 
 KERNEL_SIZE = 3     # kernel size for maxpool and conv
 STRIDE = 2          # stride for maxpool and conv
@@ -40,10 +40,14 @@ class SnoutNet(nn.Module):
     
     def forward(self, X):
         X = self.featureNet(X)
-        print(f"Size of Feature Net before reshape {X.size()}")
+       # print(f"Size of Feature Net before reshape {X.size()}")
         X = X.view(-1, 256*4*4)                                     # reshape for FC layers
         #X = torch.flatten(X)        # reshape for FC layers
         return self.regressor(X)
+
+class EuclideanLoss(nn.Module):
+    def forward(self, prediction: torch.Tensor, target: torch.Tensor):
+        return torch.sqrt(torch.sum((prediction-target)**2, dim=1)).mean()
 
 # testing script 
 if __name__ == "__main__":
