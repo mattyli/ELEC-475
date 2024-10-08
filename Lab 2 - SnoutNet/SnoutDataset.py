@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from torchvision.io import decode_image, ImageReadMode
-from snoutTransforms import ToTensor, RescaleImage
+from snoutTransforms import ToTensor, RescaleImage, RandomHorizontalFlip, RandomVerticalFlip
 import glob
 from typing import Tuple, Any, Optional, Union, List
 import matplotlib.pyplot as plt
@@ -160,12 +160,10 @@ if __name__ == "__main__":
     label_path = Path("train_noses.txt")
     image_folder = Path("images")
 
-    transform_pipeline = transforms.Compose([RescaleImage(IMAGE_SIZE), ToTensor()])
+    transform_pipeline = transforms.Compose([RescaleImage(IMAGE_SIZE), RandomHorizontalFlip(), RandomVerticalFlip(), ToTensor()])
 
     dataset = SnoutDataset(label_path=label_path, image_folder=image_folder, transform=transform_pipeline)
     print(dataset.__len__())
-    for i in range(10):
-        print(dataset.images[i])
 
     dataloader = DataLoader(dataset, batch_size=8, shuffle=True, num_workers=0)
     
