@@ -127,34 +127,7 @@ class SnoutDataset(Dataset):
                     return sample
 
             except (IOError, SyntaxError) as e:
-                # print(f'Corrupted file: {self.images[idx]}')
                 idx += 1 % self.__len__()
-            
-
-        # while True:  # Retry loop in case of a failed read
-        #     try:
-        #         img = io.imread(self.images[idx])
-        #         if img.ndim != 3:
-        #             print(self.images[idx])
-        #         if img.shape[-1] == 4:  # If RGBA, discard alpha channel
-        #             img = img[:, :, :3]
-        #         snout_center = self.snout_tuples[idx]
-
-        #         if img.ndim == 2:  # Grayscale
-        #             img = img[:, :, np.newaxis]  # Add a channel dimension
-
-        #         sample = {'image': img, 'center': snout_center}
-
-        #         if self.transform:
-        #             sample = self.transform(sample)
-
-        #         return sample
-
-        #     except (OSError, IOError, SyntaxError) as e:
-        #         print(f"Error with image {self.images[idx]}: {e}")
-        #         idx = (idx + 1) % len(self.images)  # Move to the next image, wrapping around
-        
-        
 
 if __name__ == "__main__":
     label_path = Path("train_noses.txt")
