@@ -15,8 +15,12 @@ import numpy as np
 import torch
 from typing import Union, Dict
 from skimage import transform
+import random
+# numpy represents images as height x width x color
+# torch represents as color x width x height
 
 # Taken from PyTorch tutorial
+# tensor will be 
 class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
     def __call__(self, sample: Dict[str, torch.Tensor])->Dict[str, torch.Tensor]:
@@ -63,4 +67,34 @@ class RescaleImage(object):
         center = center * [new_w / w, new_h / h]
 
         return {'image': img, 'center': center}
+
+# These random transforms occur ~50% of the time, therefore over the epochs, original and augmented images should be seen aproximately equally
+class RandomHorizontalFlip(object):
+    def __call__(self, sample: Dict):
+        ret = bool(random.getrandbits(1))       # get a random boolean to determine whether we actually do any transform
+        if not ret:                             # don't flip the image
+            return sample                                   
+        
+        image, center = sample['image'], sample['center']
+        assert(isinstance(image, np.ndarray))
+        center[0] = 227 - 1 - center[0]                 # overwrite label x value with new one (227 is width of the image since they have all been rescaled)
+        new_image = np.flip(image, axis=1).copy()       # width is stored as the second dimension in the np.array (watch memory consumption from deepcopy)
+        return {'image':new_image, 'center':center}
+
+class RandomVerticalFlip(object):
+    def __call__(self, sample: Dict):
+        ret = bool(random.getrandbits(1))       # get a random boolean to determine whether we actually do any transform
+        if not ret:                             # don't flip the image
+            return sample                                   
+        
+        image, center = sample['image'], sample['center']
+        assert(isinstance(image, np.ndarray))
+        center[1] = 227 - 1 - center[1]                 # overwrite label x value with new one (227 is width of the image since they have all been rescaled)
+        new_image = np.flip(image, axis=0).copy()       # width is stored as the second dimension in the np.array (watch memory consumption from deepcopy)
+        return {'image':new_image, 'center':center}
+
+# class to randomly rotate, 90, 180, 270
+class RandomRotate(object):
+    def __call__(self, sample: Dict):
+        pass
 
