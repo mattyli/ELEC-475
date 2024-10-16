@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from typing import Union, Dict
 from skimage import transform
+import torchvision
 import random
 # numpy represents images as height x width x color
 # torch represents as color x width x height
@@ -93,8 +94,35 @@ class RandomVerticalFlip(object):
         new_image = np.flip(image, axis=0).copy()       # width is stored as the second dimension in the np.array (watch memory consumption from deepcopy)
         return {'image':new_image, 'center':center}
 
-# class to randomly rotate, 90, 180, 270
-class RandomRotate(object):
+# TODO: no randomness in this right now, fix it. 
+# ^ above 2 classes can be compacted
+class RandomFlip(object):
+    def __init__(self, dimension: str, state: bool):
+        self.map = {'HORIZONTAL': 0, 'VERTICAL':1}      # map corresponds to the indices of a num
+        assert(dimension in ['HORIZONTAL', 'VERTICAL'])
+        self.dimension = self.map[dimension]
+        self.axis = (0 if self.dimension == 1 else 1)   # vertical flip (axis = 0), horizontal flip (axis = 1) in np.flip()    
+        self.state = state
+
     def __call__(self, sample: Dict):
-        pass
+        if not self.state:
+            return sample
+        image, center = sample['image'], sample['center']
+        assert(isinstance(image, np.ndarray))
+        center[self.dimension] = 227 - 1 - center[self.dimension]
+        new_image = np.flip(image, axis=self.axis).copy()# to get rid of the negative stride
+        return {'image':new_image, 'center':center}
+
+class RandomColorJitter(torchvision.transforms.ColorJitter):
+    def __init__(self, state: bool, brightness=0, contrast=0, saturation=0, hue=0):
+        super().__init__(brightness, contrast, saturation, hue)
+        self.state = state
+
+    def __call__(self, sample: Dict):
+        if not self.state:
+            return sample
+        image, center = sample['image'], sample['center']
+        new_image = super().__call__(image)
+
+        return {'image':new_image, 'center':center}
 
