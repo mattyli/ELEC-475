@@ -13,6 +13,10 @@ from pathlib import Path
 from torchinfo import summary
 from tqdm import tqdm
 import os
+import json
+import time
+
+# https://pytorch.org/docs/stable/data.html#torch.utils.data.random_split (to actually make a train and validation set)
 
 # colab dependencies (https://medium.com/swlh/leverage-google-colab-gpu-runtime-for-your-non-notebook-python-project-d13840c932eb)
 # from google.colab import drive
@@ -56,16 +60,20 @@ def train(n_epochs,
           save_file,
           plot_file
           )->None:
+    # double check:
+    print(f"Training on device {device}")
+    model = model.to(device=device)
 
     losses_train = []
     losses_validation = []
-    for epoch in tqdm(range(n_epochs)):
-        print(f"Epoch: {epoch+1}")
+    begin_time = time.time()
+    for epoch in range(n_epochs):
+        print(f"Epoch: {epoch+1} {datetime.datetime.now()}")
         loss_train = 0.0
         
         # train loop
-        model.train()
-        for batch in train_loader:
+        model.train()               # set model mode to train
+        for i, batch in enumerate(train_loader):
             images, centers = batch['image'], batch['center']       # load images and ground truth (labelled centers)
             images = images.to(device=device).float()
             centers = centers.to(device=device).float()                          
@@ -78,10 +86,10 @@ def train(n_epochs,
             loss_train += loss.item()
 
         # validation loop
-        model.eval()
+        model.eval()                # set model mode to evaluation
         validation_loss = 0.0
-        with torch.no_grad():
-            for validation_batch in tqdm(validation_loader, leave=False):
+        with torch.no_grad():       # do not compute gradients, save computational resources
+            for validation_batch in validation_loader:
                 validation_images, validation_centers = validation_batch['image'], validation_batch['center']
                 validation_images = validation_images.to(device=device).float()
                 validation_centers = validation_centers.to(device=device).float()
@@ -89,28 +97,16 @@ def train(n_epochs,
                 loss = loss_fn(validation_pred, validation_centers)
                 validation_loss += loss.item()
 
+        # epoch losses are taken as the average loss over the batches for a given epoch
         scheduler.step(loss_train)
         epoch_train_loss = loss_train/len(train_loader)
         epoch_validation_loss = validation_loss/ len(validation_loader)
         losses_train += [epoch_train_loss]
         losses_validation += [epoch_validation_loss]
         print(f"{datetime.datetime.now()} Epoch: {epoch+1}, Training Loss: {epoch_train_loss}, Validation Loss: {epoch_validation_loss}")
-        #   break   # debug
+    train_time = time.time() - begin_time
+    return losses_train, losses_validation, train_time
     
-    # moved to outside the loop, don't need to redraw image every epoch
-    if save_file:
-        torch.save(model.state_dict(), save_file)
-    if plot_file:
-        plt.figure(2, figsize=(12, 7))
-        plt.clf()
-        plt.plot(losses_train, label='train')
-        plt.plot(losses_validation, label='validation')
-        plt.xlabel('epoch')
-        plt.ylabel('loss')
-        plt.legend(loc=1)
-        print('saving ', plot_file)
-        plt.savefig(plot_file)
-
 def main():
 
     save_file = "weights.pth"   # default
@@ -118,6 +114,13 @@ def main():
     n_epochs = N_EPOCHS
     batch_size = BATCH_SIZE
     dropout = DROPOUT_P
+    fp = "images/"
+    cwd = os.getcwd()
+    
+    # transforms (default false)
+    hflip = False
+    vflip = False
+    rcj = False
 
     print('running main ...')
 
@@ -128,6 +131,13 @@ def main():
     argParser.add_argument('-b', metavar='batch size', type=int, help='batch size [32]')
     argParser.add_argument('-p', metavar='plot', type=str, help='output loss plot file (.png)')
     argParser.add_argument('-d', metavar='dropout rate', type=float, help='dropout rate')
+    argParser.add_argument('-fp', metavar='image path', type=str, help="absolute filepath to the images")
+    argParser.add_argument('--hflip', action='store_false', help="absolute filepath to the images")
+    argParser.add_argument('--vflip', action='store_false', help="absolute filepath to the images")
+    argParser.add_argument('--rcj', action='store_false', help="absolute filepath to the images")
+    argParser.add_argument('--euclidean-loss', action='store_false', help='loss function, default is MSE')
+    argParser.add_argument('-patience', metavar='patience (epochs)', type=int, help='patience for learning rate scheduler (# of epochs)')
+    argParser.add_argument('-factor', metavar='factor', type=float, help='factor to reduce LR by for learning rate scheduler')
 
     args = argParser.parse_args()
 
@@ -141,11 +151,18 @@ def main():
         plot_file = args.p
     if args.d != None and args.d <= 1.0 and args.d >= 0.0:
         dropout = args.d
+    if args.fp != None:
+        fp = args.fp
 
-    print('\t\tn epochs = ', n_epochs)
-    print('\t\tbatch size = ', batch_size)
-    print('\t\tsave file = ', save_file)
-    print('\t\tplot file = ', plot_file)
+    arg_dict = vars(args)
+
+    # Iterate over the arguments and print their respective metavar and value
+    for action in argParser._actions:
+        if isinstance(action, argparse._StoreAction):  # Only consider arguments with stored values
+            metavar = action.metavar  # Get the metavar value
+            value = arg_dict[action.dest]  # Get the actual argument value
+            if value is not None:
+                print(f'\t\t{metavar}: {value}')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('\t\tusing device ', device)
@@ -154,36 +171,68 @@ def main():
     model.to(device=device)
     model.apply(init_weights)
     summary(model)
-    transform_pipeline = transforms.Compose([snoutTransforms.RescaleImage(IMAGE_SIZE), snoutTransforms.ToTensor()])
+    transform_pipeline = transforms.Compose([snoutTransforms.RescaleImage(IMAGE_SIZE), snoutTransforms.RandomFlip("HORIZONTAL", state=args.hflip),
+                                             snoutTransforms.RandomFlip("HORIZONTAL", state=args.vflip), 
+                                             snoutTransforms.ToTensor(),
+                                             snoutTransforms.RandomColorJitter(brightness=5, contrast=5, saturation=5, state=args.rcj)
+                                             ])
 
     print("Fetching training set...")
-    train_set = SnoutDataset(label_path="train_noses.txt", image_folder="images/", transform=transform_pipeline)
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    train_set = SnoutDataset(dir=fp, train=True, transform=transform_pipeline)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=4)
 
     print("Fetching validation set...")
-    validation_set = SnoutDataset(label_path="test_noses.txt", image_folder="images/", transform=transform_pipeline)
-    validation_loader = DataLoader(validation_set, batch_size=batch_size, shuffle=True)
+    validation_set = SnoutDataset(dir=fp, train=False, transform=transform_pipeline)
+    validation_loader = DataLoader(validation_set, batch_size=batch_size, shuffle=True, num_workers=4)
 
+    # Try SGD and ADAM?
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
     print("optimizer created...")
 
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min')
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min', factor=1e-2, patience=8)
     print("scheduler created...")
+
     loss_fn = nn.MSELoss(size_average=None, reduce=None, reduction='mean')
     print("loss function created...")
     print('Entering training loop...')
 
-    train(n_epochs=n_epochs,
-          optimizer=optimizer,
-          model=model,
-          loss_fn=loss_fn,
-          train_loader=train_loader,
-          validation_loader=validation_loader,
-          scheduler=scheduler,
-          device=device,
-          save_file=save_file,
-          plot_file=plot_file
-          )
+    losses_train, losses_validation, train_time = train(n_epochs=n_epochs,
+                                                        optimizer=optimizer,
+                                                        model=model,
+                                                        loss_fn=loss_fn,
+                                                        train_loader=train_loader,
+                                                        validation_loader=validation_loader,
+                                                        scheduler=scheduler,
+                                                        device=device,
+                                                        save_file=save_file,
+                                                        plot_file=plot_file
+                                                        )
+                
+    output_json = {"Elapsed Training Time (s)": train_time,
+                   "Batch Size": batch_size,
+                   "Epochs": n_epochs,
+                   "Dropout": dropout,
+                   "Train Loss": losses_train,
+                   "Validation Loss": losses_validation
+                   }
+    with open(os.path.join(cwd, "raw_metadata", f"{save_file}.json"), "w") as out_file:
+        json.dump(output_json, out_file)
+        
+    # moved to outside the loop, don't need to redraw image every epoch
+    if save_file:
+        torch.save(model.state_dict(), os.path.join(cwd, "models", save_file))
+
+    if plot_file:
+        plt.figure(2, figsize=(12, 7))
+        plt.clf()
+        plt.plot(losses_train, label='train')
+        plt.plot(losses_validation, label='validation')
+        plt.xlabel('epoch')
+        plt.ylabel('loss')
+        plt.legend(loc=1)
+        print('saving ', plot_file)
+        plt.savefig(os.path.join(cwd, "loss_plots", plot_file))
+
 
 if __name__ == '__main__':
     main()
